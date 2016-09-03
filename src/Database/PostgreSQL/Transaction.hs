@@ -53,6 +53,7 @@ import           Database.PostgreSQL.Simple.FromRow
 import           Database.PostgreSQL.Simple.ToRow
 import qualified Database.PostgreSQL.Simple.Transaction as Postgres.Transaction
 import qualified Database.PostgreSQL.Simple.Types       as PGTypes
+import Debug.Trace
 
 -- | The Postgres transaction monad transformer. This is implemented as a monad transformer
 -- so as to integrate properly with monadic logging libraries like @monad-logger@ or @katip@.
@@ -115,26 +116,38 @@ query :: (ToRow input, FromRow output, MonadIO m)
       => input
       -> Postgres.Query
       -> PGTransactionT m [output]
-query params q = getConnection >>= (\conn -> liftIO $ Postgres.query conn q params)
+query params q = getConnection >>= (\conn -> liftIO $ do 
+    putStrLn . show =<< Postgres.formatQuery conn q params
+    Postgres.query conn q params
+  )
 
 -- | As 'query', but for queries that take no arguments.
 query_ :: (FromRow output, MonadIO m)
        => Postgres.Query
        -> PGTransactionT m [output]
-query_ q = getConnection >>= liftIO . (`Postgres.query_` q)
+query_ q = getConnection >>= (\c -> liftIO $ do 
+    traceM $ show q
+    Postgres.query_ c q
+  )
 
 -- | Run a single SQL action and return success.
 execute :: (ToRow input, MonadIO m)
         => input
         -> Postgres.Query
         -> PGTransactionT m Int64
-execute params q = getConnection >>= (\conn -> liftIO $ Postgres.execute conn q params)
+execute params q = getConnection >>= (\conn -> liftIO $ do 
+    traceM . show =<< Postgres.formatQuery conn q params
+    Postgres.execute conn q params
+  )
 
 -- | As 'execute', but for queries that take no arguments.
 execute_ :: MonadIO m
          => Postgres.Query
          -> PGTransactionT m Int64
-execute_ q = getConnection >>= (\conn -> liftIO $ Postgres.execute_ conn q)
+execute_ q = getConnection >>= (\conn -> liftIO $ do 
+    traceM $ show q 
+    Postgres.execute_ conn q
+  )
 
 -- | As 'Database.PostgreSQL.Simple.executeMany', but operating in the transaction monad.
 -- If any one of these computations fails, the entire block will be rolled back.
@@ -142,14 +155,20 @@ executeMany :: (ToRow input, MonadIO m)
             => [input]
             -> Postgres.Query
             -> PGTransactionT m Int64
-executeMany params q = getConnection >>= (\conn -> liftIO $ Postgres.executeMany conn q params)
+executeMany params q = getConnection >>= (\conn -> liftIO $ do 
+--    traceM . show =<< Postgres.formatQuery conn q params
+    Postgres.executeMany conn q params
+  )
 
 -- | Identical to 'Database.PostgreSQL.Simple.returning', save parameter order.
 returning :: (ToRow input, FromRow output, MonadIO m)
           => [input]
           -> Postgres.Query
           -> PGTransactionT m [output]
-returning params q = getConnection >>= (\conn -> liftIO $ Postgres.returning conn q params)
+returning params q = getConnection >>= (\conn -> liftIO $ do 
+    -- traceM . show =<< Postgres.formatQuery conn q params
+    Postgres.returning conn q params
+  )
 
 -- | Run a query and return 'Just' the first result found or 'Nothing'.
 queryHead :: (ToRow input, FromRow output, MonadIO m)
