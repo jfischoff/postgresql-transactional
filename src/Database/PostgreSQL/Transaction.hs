@@ -126,7 +126,7 @@ query_ :: (FromRow output, MonadIO m)
        => Postgres.Query
        -> PGTransactionT m [output]
 query_ q = getConnection >>= (\c -> liftIO $ do 
-    putStrLn $ show q
+    putStrLn $ read $ show q
     Postgres.query_ c q
   )
 
@@ -145,7 +145,7 @@ execute_ :: MonadIO m
          => Postgres.Query
          -> PGTransactionT m Int64
 execute_ q = getConnection >>= (\conn -> liftIO $ do 
-    putStrLn $ show q 
+    putStrLn $ read $ show q 
     Postgres.execute_ conn q
   )
 
