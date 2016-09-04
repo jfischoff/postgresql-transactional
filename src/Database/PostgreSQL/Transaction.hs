@@ -53,7 +53,7 @@ import           Database.PostgreSQL.Simple.FromRow
 import           Database.PostgreSQL.Simple.ToRow
 import qualified Database.PostgreSQL.Simple.Transaction as Postgres.Transaction
 import qualified Database.PostgreSQL.Simple.Types       as PGTypes
-import Debug.Trace
+import qualified Data.ByteString as BS
 
 -- | The Postgres transaction monad transformer. This is implemented as a monad transformer
 -- so as to integrate properly with monadic logging libraries like @monad-logger@ or @katip@.
@@ -117,7 +117,7 @@ query :: (ToRow input, FromRow output, MonadIO m)
       -> Postgres.Query
       -> PGTransactionT m [output]
 query params q = getConnection >>= (\conn -> liftIO $ do 
-    putStrLn . show =<< Postgres.formatQuery conn q params
+    BS.putStrLn =<< Postgres.formatQuery conn q params
     Postgres.query conn q params
   )
 
@@ -126,7 +126,7 @@ query_ :: (FromRow output, MonadIO m)
        => Postgres.Query
        -> PGTransactionT m [output]
 query_ q = getConnection >>= (\c -> liftIO $ do 
-    traceM $ show q
+    putStrLn $ show q
     Postgres.query_ c q
   )
 
@@ -136,7 +136,7 @@ execute :: (ToRow input, MonadIO m)
         -> Postgres.Query
         -> PGTransactionT m Int64
 execute params q = getConnection >>= (\conn -> liftIO $ do 
-    traceM . show =<< Postgres.formatQuery conn q params
+    BS.putStrLn =<< Postgres.formatQuery conn q params
     Postgres.execute conn q params
   )
 
@@ -145,7 +145,7 @@ execute_ :: MonadIO m
          => Postgres.Query
          -> PGTransactionT m Int64
 execute_ q = getConnection >>= (\conn -> liftIO $ do 
-    traceM $ show q 
+    putStrLn $ show q 
     Postgres.execute_ conn q
   )
 
