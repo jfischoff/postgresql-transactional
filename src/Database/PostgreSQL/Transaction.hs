@@ -24,7 +24,7 @@ use of a SQL quasiquoter.
 -}
 
 module Database.PostgreSQL.Transaction
-    ( PGTransactionT
+    ( PGTransactionT (..)
     , PGTransaction
     , runPGTransactionT
     , runPGTransactionT'
@@ -54,6 +54,7 @@ import           Database.PostgreSQL.Simple.ToRow
 import qualified Database.PostgreSQL.Simple.Transaction as Postgres.Transaction
 import qualified Database.PostgreSQL.Simple.Types       as PGTypes
 import qualified Data.ByteString as BS
+import Control.Monad.Catch
 
 -- | The Postgres transaction monad transformer. This is implemented as a monad transformer
 -- so as to integrate properly with monadic logging libraries like @monad-logger@ or @katip@.
@@ -64,6 +65,8 @@ newtype PGTransactionT m a =
              , Monad
              , MonadTrans
              , MonadIO
+             , MonadCatch
+             , MonadThrow
              )
              
 instance MonadReader r m => MonadReader r (PGTransactionT m) where
