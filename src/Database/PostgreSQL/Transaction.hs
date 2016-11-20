@@ -52,6 +52,7 @@ import           Database.PostgreSQL.Simple.FromField
 import           Database.PostgreSQL.Simple.FromRow
 import           Database.PostgreSQL.Simple.ToRow
 import qualified Database.PostgreSQL.Simple.Transaction as Postgres.Transaction
+import qualified Database.PostgreSQL.Simple.Transaction as PT
 import qualified Database.PostgreSQL.Simple.Types       as PGTypes
 import qualified Data.ByteString as BS
 import Control.Monad.Catch
@@ -59,15 +60,33 @@ import Control.Monad.Catch
 -- | The Postgres transaction monad transformer. This is implemented as a monad transformer
 -- so as to integrate properly with monadic logging libraries like @monad-logger@ or @katip@.
 newtype PGTransactionT m a =
-    PGTransactionT (ReaderT Postgres.Connection m a)
+    PGTransactionT { unPGTransactionT :: ReaderT Postgres.Connection m a }
     deriving ( Functor
              , Applicative
              , Monad
              , MonadTrans
              , MonadIO
-             , MonadCatch
              , MonadThrow
+             , MonadMask
              )
+             
+instance (MonadIO m, MonadThrow m, MonadMask m, MonadCatch m) => MonadCatch (PGTransactionT m) where
+  catch (PGTransactionT action) handler = PGTransactionT $ mask $ \restore -> do
+    liftIO $ putStrLn "before save point"
+    conn <- ask
+    sp <- liftIO $ PT.newSavepoint conn
+    (restore action `catch` (\e -> case fromException e of
+                                    Just x  -> do liftIO $ putStrLn "caught exception"
+                                                  liftIO $ PT.rollbackToSavepoint conn sp
+                                                  unPGTransactionT $ handler x
+                                    Nothing -> do liftIO $ putStrLn "rethrow exception"
+                                                  throwM e
+                           )) `finally` (liftIO $ PT.releaseSavepoint conn sp `catch` 
+                             \err ->
+                                if PT.isFailedTransactionError err
+                                    then liftIO $ PT.rollbackToAndReleaseSavepoint conn sp
+                                    else throwM err
+        )
              
 instance MonadReader r m => MonadReader r (PGTransactionT m) where
   ask = lift ask
@@ -206,3 +225,25 @@ formatQuery :: (ToRow input, MonadIO m)
 formatQuery params q = do
     conn <- getConnection
     liftIO (PGTypes.Query <$> Postgres.formatQuery conn q params)
+
+newSavepoint :: MonadIO m => PGTransactionT m PGTypes.Savepoint
+newSavepoint = getConnection >>= liftIO . Postgres.Transaction.newSavepoint
+
+releaseSavepoint :: MonadIO m => PGTypes.Savepoint -> PGTransactionT m ()
+releaseSavepoint savePoint = do
+    conn <- getConnection
+    liftIO $ Postgres.Transaction.releaseSavepoint conn savePoint
+
+rollbackToSavepoint :: MonadIO m 
+                    => PGTypes.Savepoint 
+                    -> PGTransactionT m ()
+rollbackToSavepoint savePoint = do
+    conn <- getConnection
+    liftIO $ Postgres.Transaction.rollbackToSavepoint conn savePoint
+
+rollbackToAndReleaseSavepoint :: MonadIO m 
+                              => PGTypes.Savepoint 
+                              -> PGTransactionT m ()
+rollbackToAndReleaseSavepoint savePoint = do
+    conn <- getConnection
+    liftIO $ Postgres.Transaction.rollbackToAndReleaseSavepoint conn savePoint
